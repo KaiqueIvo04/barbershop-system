@@ -4,3 +4,6 @@
 [submodule "api-gtw"]
 	path = api-gtw
 	url = https://github.com/KaiqueIvo04/barbershop-gtw
+[submodule "schedule-management"]
+	path = schedule-management
+	url = https://github.com/KaiqueIvo04/barbershop-schedule-management
