@@ -11,7 +11,7 @@ CERTS_DIR="$(pwd)/.certs"
 CA_DIR="$CERTS_DIR/ca"
 SERVICES_NAMES=("account")
 
-############################################## FUNÇÕES DE GERAÇÃO DE CONFIGS OPENSSL
+############################################## FUNCTIONS OF GENERATION OPENSSL CONFIGS
 
 generate_openssl_conf_server() {
   local path="$1"
@@ -97,6 +97,49 @@ DNS.3 = $service
 EOF
 }
 
+generate_openssl_conf_rabbitmq_client() {
+  local path="$1"
+  local service="$2"
+  cat > "$path/rabbitmq_client_openssl.cnf" <<EOF
+[ req ]
+distinguished_name = req_distinguished_name
+req_extensions = v3_req
+
+[ req_distinguished_name ]
+countryName_default = BR
+stateOrProvinceName_default = Paraiba
+localityName_default = CampinaGrande
+organizationName_default = Barbershop Service
+commonName_default = Barbershop
+
+[ v3_req ]
+subjectAltName = @alt_names
+
+[ alt_names ]
+IP.1 = 127.0.0.1
+DNS.1 = localhost
+DNS.2 = rabbitmq
+DNS.3 = $service
+EOF
+}
+
+generate_openssl_conf_rabbitmq_client_ext() {
+  local path="$1"
+  local service="$2"
+  cat > "$path/rabbitmq_client_ext.cnf" <<EOF
+basicConstraints = CA:false
+keyUsage         = digitalSignature, keyEncipherment
+extendedKeyUsage = clientAuth
+subjectAltName   = @alt_names
+
+[ alt_names ]
+IP.1 = 127.0.0.1
+DNS.1 = localhost
+DNS.2 = rabbitmq
+DNS.3 = $service
+EOF
+}
+
 ############################################## 1 - CERTIFICATE AUTHORITY (CA)
 
 mkdir -p "$CA_DIR"
@@ -111,7 +154,7 @@ openssl req -x509 -new -nodes -key "$CA_DIR/ca_key.pem" -sha256 -days 365 \
 
 log_success "--CERTIFICATE AUTHORITY GERADA--"
 
-############################################## 2 - SERVIÇOS
+############################################## 2 - SERVICES
 
 generate_openssl_conf_server "$CERTS_DIR"
 generate_openssl_conf_server_ext "$CERTS_DIR"
@@ -164,7 +207,51 @@ for service in "${SERVICES_NAMES[@]}"; do
 
     log_success "--CERTIFICADO DE CLIENTE MONGODB PARA $service GERADO--"
 
-    ######################################################## MONGODB CLIENT CERTS
+    ######################################################## RABBITMQ CLIENT CERTS
 
+    log_info "[2/5] Gerando chave privada RabbitMQ para: $service"
+    openssl genrsa -out "$SERVICE_DIR/rabbitmq_key.pem" 2048
+
+    generate_openssl_conf_rabbitmq_client "$SERVICE_DIR" "$service"
+
+    log_info "[2/5] Gerando CSR (Certificate Signing Request) RabbitMQ para: $service"
+    openssl req -new -key "$SERVICE_DIR/rabbitmq_key.pem" \
+    -subj "/C=BR/ST=Paraiba/L=CampinaGrande/O=${service}/CN=Barbershop" \
+    -out "$SERVICE_DIR/rabbitmq_client.csr" \
+    -config "$SERVICE_DIR/rabbitmq_client_openssl.cnf"
+
+    generate_openssl_conf_rabbitmq_client_ext "$SERVICE_DIR" "$service"
+
+    log_info "[2/5] Assinando certificado de cliente RabbitMQ para: $service"
+    openssl x509 -req -in "$SERVICE_DIR/rabbitmq_client.csr" \
+    -CA "$CA_DIR/ca_cert.pem" -CAkey "$CA_DIR/ca_key.pem" \
+    -CAcreateserial -out "$SERVICE_DIR/rabbitmq_client_cert.pem" \
+    -days 365 -sha256 \
+    -extfile "$SERVICE_DIR/rabbitmq_client_ext.cnf"
+
+    log_success "--CERTIFICADO DE CLIENTE RABBITMQ PARA $service GERADO--"
+
+    ######################################################## JWT KEYS (account)
+
+    if [ "$service" = "account" ]; then
+        log_info "[2/5] Gerando chaves JWT para: $service"
+        
+        ssh-keygen -t rsa -P "" -b 2048 -m PEM -f "$SERVICE_DIR/jwt.key"
+        ssh-keygen -e -m PEM -f "$SERVICE_DIR/jwt.key" > "$SERVICE_DIR/jwt.key.pub"
+        
+        [ -d "$CERTS_DIR/api-gtw" ] && cp "$SERVICE_DIR/jwt.key.pub" "$CERTS_DIR/api-gtw/"
+        
+        log_success "--CHAVES JWT PARA $service GERADAS--"
+    fi
     
 done
+
+
+
+
+############################################## 3 - LIMPEZA DE ARQUIVOS TEMPORÁRIOS
+rm -rf $CERTS_DIR/ca $CERTS_DIR/**/*.csr $CERTS_DIR/**/*.cnf $CERTS_DIR/*.cnf
+
+log_success "--ARQUIVOS TEMPORÁRIOS REMOVIDOS--"
+
+log_success "🎉 TODOS OS CERTIFICADOS FORAM GERADOS COM SUCESSO!"
