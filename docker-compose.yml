@@ -1,0 +1,178 @@
+services:
+
+    redis-api-gtw: # Redis container for the Api Gateway
+      image: redis:latest
+      container_name: barbershop-redis-api-gateway
+      restart: always
+      command: ["redis-server"]
+      volumes:
+        - redis-api-gateway-data:/data
+      networks:
+        - net-barbershop
+      logging:
+        driver: json-file
+        options:
+          max-size: 100m
+
+    rabbitmq:
+      image: rabbitmq:3-management-alpine
+      container_name: barbershop-rabbitmq
+      restart: always
+      ports:
+        - 15672:15672 # Management UI
+        - 5672:5672 # AMQP Protocol
+      environment:
+      - RABBITMQ_DEFAULT_USER=admin  # ← Adicione
+      - RABBITMQ_DEFAULT_PASS=admin123  # ← Adicione
+      - RABBITMQ_DEFAULT_VHOST=/
+      networks:
+        - net-barbershop
+      logging:
+        driver: json-file
+        options:
+          max-size: 100m
+    
+    # MongoDB para Account Service
+    mongodb-account:
+      image: percona/percona-server-mongodb:4.4.3
+      container_name: barbershop-mongodb-account
+      restart: always
+      command: [
+        "--tlsMode", "requireTLS",
+        "--tlsCertificateKeyFile", "/etc/ssl/mongodb.pem",
+        "--tlsCAFile", "/etc/ssl/ca.crt"
+      ]
+      environment:
+        MONGO_INITDB_ROOT_USERNAME: ${MONGO_ACCOUNT_ROOT_USER:-admin}
+        MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ACCOUNT_ROOT_PASS:-admin123}
+        MONGO_APPLICATION_DATABASE: barbershop-account
+      volumes:
+        - mongodb-account-data:/data/db
+        - mongodb-account-config:/data/configdb
+        - ./.certs/account/mongodb:/etc/ssl:ro
+      networks:
+        - net-barbershop
+      logging:
+        driver: json-file
+        options:
+          max-size: 100m
+
+    # MongoDB para Account Service
+    # mongodb-schedule-management:
+    #   image: mongo:7-jammy
+    #   container_name: barbershop-mongodb-schedule-management
+    #   restart: always
+    #   environment:
+    #     MONGO_INITDB_ROOT_USERNAME: ${MONGO_SCHEDULE_MANAGEMENT_ROOT_USER:-admin}
+    #     MONGO_INITDB_ROOT_PASSWORD: ${MONGO_SCHEDULE_MANAGEMENT_ROOT_PASS:-admin123}
+    #     MONGO_INITDB_DATABASE: barbershop-schedule-management
+    #   volumes:
+    #     - mongodb-schedule-management-data:/data/db
+    #     - mongodb-schedule-management-config:/data/configdb
+    #     - ./.config/mongodb/schedule-management/mongod.conf:/etc/mongod.conf:ro
+    #     - ./.config/mongodb/schedule-management/init-schedule-management.js:/docker-entrypoint-initdb.d/init-account.js
+    #     - ./.certs/schedule-management/mongodb:/etc/ssl:ro
+    #   command: ["mongod", "--config", "/etc/mongod.conf"]
+    #   networks:
+    #     - net-barbershop
+    #   logging:
+    #     driver: json-file
+    #     options:
+    #       max-size: 100m
+
+    api-gateway: # Container for reverse proxy service on the RegNutes platform.
+      build: ./api-gtw
+      container_name: barbershop-api-gateway
+      restart: always
+      depends_on: 
+        - redis-api-gtw
+      environment:
+        - TZ=America/Sao_Paulo
+        - NODE_ENV=${NODE_ENV:-development}
+        - PORT_HTTP=8080
+        - PORT_HTTPS=8081
+        - SSL_CERT_PATH=/etc/.certs/server_cert.pem
+        - SSL_KEY_PATH=/etc/.certs/server_key.pem
+        - JWT_PUBLIC_KEY_PATH=/etc/.certs/jwt_public.key
+        - API_GATEWAY_HOSTNAME=${API_GATEWAY_HOSTNAME:-localhost}
+        - RABBIT_MGT_HOSTNAME=${RABBIT_MGT_HOSTNAME:-rabbit.localhost}
+        - ACCOUNT_SERVICE=https://account:3001
+        - SCHEDULE_MANAGEMENT_SERVICE=https://schedule-management:4001
+        - WEB_APP_SERVICE=http://app:8080
+        - RABBIT_MGT_SERVICE=http://rabbitmq:15672
+        - ISSUER=barbershop
+        - EMULATE_REDIS=false
+        - PORT_REDIS=6379
+        - HOST_REDIS=redis-api-gtw
+      ports:
+        - 8080:8080
+        - 8081:8081
+      volumes:
+        - ${SSL_KEY_PATH}:/etc/.certs/server_key.pem:ro
+        - ${SSL_CERT_PATH}:/etc/.certs/server_cert.pem:ro
+        - .certs/api-gtw/jwt_public.key:/etc/.certs/jwt_public.key:ro
+      networks:
+        - net-barbershop
+      logging:
+        driver: json-file
+        options:
+          max-size: 100m
+        
+    account:
+      build: ./account
+      container_name: barbershop-account
+      restart: always
+      depends_on: 
+        - mongodb-account
+        - rabbitmq
+        - api-gateway
+      environment:
+      - TZ=America/Sao_Paulo
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT_HTTP=3000
+      - PORT_HTTPS=3001
+      - SSL_CERT_PATH=/etc/ssl/server_cert.pem
+      - SSL_KEY_PATH=/etc/ssl/server_key.pem
+      - JWT_PRIVATE_KEY_PATH=/etc/ssl/jwt_private.key
+      - JWT_PUBLIC_KEY_PATH=/etc/ssl/jwt_public.key
+      - ISSUER=barbershop
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - MONGODB_ENABLE_TLS=true
+      - MONGODB_URI=mongodb://admin:admin123@mongodb-account:27017/barbershop-account?authSource=admin&ssl=true
+      - MONGODB_KEY_PATH=/etc/ssl/mongodb/mongodb.pem
+      - MONGODB_CA_PATH=/etc/ssl/mongodb/ca.crt
+      - RABBITMQ_URI=${ACCOUNT_RABBITMQ_URI}
+      # - RABBITMQ_CERT_PATH=/etc/ssl/rabbitmq.crt
+      # - RABBITMQ_KEY_PATH=/etc/ssl/rabbitmq.key
+      # - RABBITMQ_CA_PATH=/etc/ssl/ca.pem
+      - DASHBOARD_HOST=https://${WEB_APP_HOSTNAME}/#
+      - ENCRYPT_SECRET_KEY=${ACC_ENCRYPT_SECRET_KEY}
+      - SALT_GENERATOR_VALUE=${SALT_GENERATOR_VALUE}
+      - ISIS_TOKEN=${ISIS_TOKEN}
+      ports:
+        - 3000:3000
+        - 3001:3001
+      volumes:
+        - ./.certs/account:/etc/ssl/:ro
+      networks:
+        - net-barbershop
+      
+volumes:
+  redis-api-gateway-data:
+    name: redis-api-gateway-data
+  mongodb-account-data:
+    name: mongodb-account-data
+  mongodb-account-config:
+    name: mongodb-account-config
+  mongodb-schedule-management-data:
+    name: mongodb-schedule-management-data
+  mongodb-schedule-management-config:
+    name: mongodb-schedule-management-config
+
+networks:
+  net-barbershop:
+    name: net-barbershop
+    driver: bridge
+    driver_opts:
+      encrypted: "true"
