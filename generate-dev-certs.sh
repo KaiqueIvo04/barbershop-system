@@ -38,34 +38,45 @@ for server_service in "${SERVER_SERVICES[@]}"; do
     echo "$server_service SERVER" | tr '[:lower:]' '[:upper:]'
     
     if [ "$server_service" = "mongodb" ]; then
-        log_info "[2/5] Gerando chave privada para MongoDB Server"
-        openssl genrsa -out "$SERVER_DIR/server_key.pem" 2048
+        echo ""
+        echo "GERANDO CERTIFICADOS DE SERVIDOR MONGODB PARA CADA MICROSSERVIÇO..."
 
-        generate_openssl_conf_mongodb_server "$SERVER_DIR"
+        for service in "${SERVICES_NAMES[@]}"; do
+            if [ "$service" = "api-gtw" ]; then
+                continue
+            fi
+            MONGODB_SERVICE_DIR="$CERTS_DIR/mongodb/$service"
+            mkdir -p "$MONGODB_SERVICE_DIR"
 
-        log_info "[2/5] Gerando CSR para MongoDB Server"
-        openssl req -new -key "$SERVER_DIR/server_key.pem" \
-        -subj "/C=BR/ST=Paraiba/L=CampinaGrande/O=MongoDB/CN=mongodb" \
-        -out "$SERVER_DIR/server.csr" \
-        -config "$SERVER_DIR/mongodb_server_openssl.cnf"
+            log_info "[2/5] Gerando chave privada para MongoDB Server: $service"
+            openssl genrsa -out "$MONGODB_SERVICE_DIR/server_key.pem" 2048
 
-        generate_openssl_conf_mongodb_server_ext "$SERVER_DIR"
+            generate_openssl_conf_mongodb_server "$MONGODB_SERVICE_DIR"
 
-        log_info "[2/5] Assinando certificado para MongoDB Server"
-        openssl x509 -req -in "$SERVER_DIR/server.csr" \
-        -CA "$CA_DIR/ca_cert.pem" -CAkey "$CA_DIR/ca_key.pem" \
-        -CAcreateserial -out "$SERVER_DIR/server_cert.pem" \
-        -days 3650 -sha256 \
-        -extfile "$SERVER_DIR/mongodb_server_ext.cnf"
+            log_info "[2/5] Gerando CSR para MongoDB Server: $service"
+            openssl req -new -key "$MONGODB_SERVICE_DIR/server_key.pem" \
+            -subj "/C=BR/ST=Paraiba/L=CampinaGrande/O=MongoDB-${service}/CN=mongodb" \
+            -out "$MONGODB_SERVICE_DIR/server.csr" \
+            -config "$MONGODB_SERVICE_DIR/mongodb_server_openssl.cnf"
 
-        # Concat certificate with key for mongodb
-        cat "$SERVER_DIR/server_cert.pem" "$SERVER_DIR/server_key.pem" >"$SERVER_DIR/server.pem"
-        rm -f "$SERVER_DIR/server_cert.pem" "$SERVER_DIR/server_key.pem"
+            generate_openssl_conf_mongodb_server_ext "$MONGODB_SERVICE_DIR"
 
-        # Copy CA for mongodb server
-        cp "$CA_DIR/ca_cert.pem" "$SERVER_DIR/"
+            log_info "[2/5] Assinando certificado para MongoDB Server: $service"
+            openssl x509 -req -in "$MONGODB_SERVICE_DIR/server.csr" \
+            -CA "$CA_DIR/ca_cert.pem" -CAkey "$CA_DIR/ca_key.pem" \
+            -CAcreateserial -out "$MONGODB_SERVICE_DIR/server_cert.pem" \
+            -days 3650 -sha256 \
+            -extfile "$MONGODB_SERVICE_DIR/mongodb_server_ext.cnf"
 
-        log_success "--CERTIFICADO DE SERVIDOR MONGODB GERADO--"
+            # Concat certificate with key for mongodb
+            cat "$MONGODB_SERVICE_DIR/server_cert.pem" "$MONGODB_SERVICE_DIR/server_key.pem" >"$MONGODB_SERVICE_DIR/server.pem"
+            rm -f "$MONGODB_SERVICE_DIR/server_cert.pem" "$MONGODB_SERVICE_DIR/server_key.pem"
+
+            # Copy CA for mongodb server
+            cp "$CA_DIR/ca_cert.pem" "$MONGODB_SERVICE_DIR/"
+
+            log_success "--CERTIFICADO DE SERVIDOR MONGODB PARA $service GERADO--"
+        done
 
     elif [ "$server_service" = "rabbitmq" ]; then
         log_info "[2/5] Gerando chave privada para RabbitMQ Server"
@@ -196,6 +207,9 @@ done
 
 ############################################## 4 - LIMPEZA DE ARQUIVOS TEMPORÁRIOS
 rm -rf $CERTS_DIR/ca $CERTS_DIR/**/*.csr $CERTS_DIR/**/*.cnf $CERTS_DIR/*.cnf
+rm -rf $CERTS_DIR/mongodb/**/*.csr $CERTS_DIR/mongodb/**/*.cnf
+
+chmod 755 ${$CERTS_DIR} -R #Alterar permissão para os arquivos
 
 log_success "--ARQUIVOS TEMPORÁRIOS REMOVIDOS--"
 

@@ -34,13 +34,13 @@ services:
     
     # MongoDB para Account Service
     mongodb-account:
-      image: percona/percona-server-mongodb:4.4.3
+      image: mongodb
       container_name: barbershop-mongodb-account
       restart: always
       command: [
         "--tlsMode", "requireTLS",
-        "--tlsCertificateKeyFile", "/etc/ssl/mongodb.pem",
-        "--tlsCAFile", "/etc/ssl/ca.crt"
+        "--tlsCertificateKeyFile", "/etc/ssl/server.pem",
+        "--tlsCAFile", "/etc/ssl/ca_cert.pem"
       ]
       environment:
         MONGO_INITDB_ROOT_USERNAME: ${MONGO_ACCOUNT_ROOT_USER:-admin}
@@ -49,7 +49,7 @@ services:
       volumes:
         - mongodb-account-data:/data/db
         - mongodb-account-config:/data/configdb
-        - ./.certs/account/mongodb:/etc/ssl:ro
+        - ./.certs/mongodb:/etc/ssl:ro
       networks:
         - net-barbershop
       logging:
