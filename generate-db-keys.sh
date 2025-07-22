@@ -25,8 +25,9 @@ for service in "${SERVICES_NAMES[@]}"; do
 
     log_info "Gerando chave AES-$KEY_SIZE para: $service"
     # Gera chave binária e codifica em base64
-    openssl rand -out "$KEY_FILE" $(($KEY_SIZE / 8))
+    openssl rand -base64 -out "$KEY_FILE" $(($KEY_SIZE / 8))
     chmod 600 "$KEY_FILE"
+    sudo chown 1001:1001 "$KEY_FILE"
 
     log_success "Chave de criptografia gerada: $KEY_FILE"
 done

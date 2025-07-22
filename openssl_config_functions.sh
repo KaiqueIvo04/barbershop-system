@@ -43,6 +43,7 @@ EOF
 
 generate_openssl_conf_mongodb_server() {
   local path="$1"
+  local service="$2"
   cat > "$path/mongodb_server_openssl.cnf" <<EOF
 [ req ]
 distinguished_name = req_distinguished_name
@@ -61,13 +62,14 @@ subjectAltName = @alt_names
 [ alt_names ]
 IP.1 = 127.0.0.1
 DNS.1 = localhost
-DNS.2 = mongodb
+DNS.2 = mongodb-$service
 DNS.3 = mongo
 EOF
 }
 
 generate_openssl_conf_mongodb_server_ext() {
   local path="$1"
+  local service="$2"
   cat > "$path/mongodb_server_ext.cnf" <<EOF
 basicConstraints = CA:false
 keyUsage         = digitalSignature, keyEncipherment
@@ -79,7 +81,7 @@ authorityKeyIdentifier = keyid,issuer
 [ alt_names ]
 IP.1 = 127.0.0.1
 DNS.1 = localhost
-DNS.2 = mongodb
+DNS.2 = mongodb-$service
 DNS.3 = mongo
 EOF
 }

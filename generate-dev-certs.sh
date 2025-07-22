@@ -51,7 +51,7 @@ for server_service in "${SERVER_SERVICES[@]}"; do
             log_info "[2/5] Gerando chave privada para MongoDB Server: $service"
             openssl genrsa -out "$MONGODB_SERVICE_DIR/server_key.pem" 2048
 
-            generate_openssl_conf_mongodb_server "$MONGODB_SERVICE_DIR"
+            generate_openssl_conf_mongodb_server "$MONGODB_SERVICE_DIR" "$service"
 
             log_info "[2/5] Gerando CSR para MongoDB Server: $service"
             openssl req -new -key "$MONGODB_SERVICE_DIR/server_key.pem" \
@@ -59,7 +59,7 @@ for server_service in "${SERVER_SERVICES[@]}"; do
             -out "$MONGODB_SERVICE_DIR/server.csr" \
             -config "$MONGODB_SERVICE_DIR/mongodb_server_openssl.cnf"
 
-            generate_openssl_conf_mongodb_server_ext "$MONGODB_SERVICE_DIR"
+            generate_openssl_conf_mongodb_server_ext "$MONGODB_SERVICE_DIR" "$service"
 
             log_info "[2/5] Assinando certificado para MongoDB Server: $service"
             openssl x509 -req -in "$MONGODB_SERVICE_DIR/server.csr" \
@@ -209,7 +209,7 @@ done
 rm -rf $CERTS_DIR/ca $CERTS_DIR/**/*.csr $CERTS_DIR/**/*.cnf $CERTS_DIR/*.cnf
 rm -rf $CERTS_DIR/mongodb/**/*.csr $CERTS_DIR/mongodb/**/*.cnf
 
-chmod 755 ${$CERTS_DIR} -R #Alterar permissão para os arquivos
+chmod 755 ${CERTS_DIR} -R #Alterar permissão para os arquivos
 
 log_success "--ARQUIVOS TEMPORÁRIOS REMOVIDOS--"
 

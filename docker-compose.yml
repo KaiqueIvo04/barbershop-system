@@ -31,16 +31,17 @@ services:
         driver: json-file
         options:
           max-size: 100m
-    
-    # MongoDB para Account Service
+
     mongodb-account:
-      image: mongodb
+      image: percona/percona-server-mongodb:4.4.3
       container_name: barbershop-mongodb-account
       restart: always
       command: [
         "--tlsMode", "requireTLS",
         "--tlsCertificateKeyFile", "/etc/ssl/server.pem",
-        "--tlsCAFile", "/etc/ssl/ca_cert.pem"
+        "--tlsCAFile", "/etc/ssl/ca_cert.pem",
+        "--enableEncryption",
+        "--encryptionKeyFile", "/etc/mongodb/encryptionKeyFile/encryption.key"
       ]
       environment:
         MONGO_INITDB_ROOT_USERNAME: ${MONGO_ACCOUNT_ROOT_USER:-admin}
@@ -49,7 +50,8 @@ services:
       volumes:
         - mongodb-account-data:/data/db
         - mongodb-account-config:/data/configdb
-        - ./.certs/mongodb:/etc/ssl:ro
+        - ./.certs/mongodb/account:/etc/ssl:ro
+        - ./.encryption_keys/account:/etc/mongodb/encryptionKeyFile:ro
       networks:
         - net-barbershop
       logging:
@@ -57,28 +59,32 @@ services:
         options:
           max-size: 100m
 
-    # MongoDB para Account Service
-    # mongodb-schedule-management:
-    #   image: mongo:7-jammy
-    #   container_name: barbershop-mongodb-schedule-management
-    #   restart: always
-    #   environment:
-    #     MONGO_INITDB_ROOT_USERNAME: ${MONGO_SCHEDULE_MANAGEMENT_ROOT_USER:-admin}
-    #     MONGO_INITDB_ROOT_PASSWORD: ${MONGO_SCHEDULE_MANAGEMENT_ROOT_PASS:-admin123}
-    #     MONGO_INITDB_DATABASE: barbershop-schedule-management
-    #   volumes:
-    #     - mongodb-schedule-management-data:/data/db
-    #     - mongodb-schedule-management-config:/data/configdb
-    #     - ./.config/mongodb/schedule-management/mongod.conf:/etc/mongod.conf:ro
-    #     - ./.config/mongodb/schedule-management/init-schedule-management.js:/docker-entrypoint-initdb.d/init-account.js
-    #     - ./.certs/schedule-management/mongodb:/etc/ssl:ro
-    #   command: ["mongod", "--config", "/etc/mongod.conf"]
-    #   networks:
-    #     - net-barbershop
-    #   logging:
-    #     driver: json-file
-    #     options:
-    #       max-size: 100m
+    mongodb-schedule-management:
+      image: percona/percona-server-mongodb:4.4.3
+      container_name: barbershop-mongodb-schedule-management
+      restart: always
+      command: [
+        "--tlsMode", "requireTLS",
+        "--tlsCertificateKeyFile", "/etc/ssl/server.pem",
+        "--tlsCAFile", "/etc/ssl/ca_cert.pem",
+        "--enableEncryption",
+        "--encryptionKeyFile", "/etc/mongodb/encryptionKeyFile/encryption.key"
+      ]      
+      environment:
+        MONGO_INITDB_ROOT_USERNAME: ${MONGO_SCHEDULE_MANAGEMENT_ROOT_USER:-admin}
+        MONGO_INITDB_ROOT_PASSWORD: ${MONGO_SCHEDULE_MANAGEMENT_ROOT_PASS:-admin123}
+        MONGO_INITDB_DATABASE: barbershop-schedule-management
+      volumes:
+        - mongodb-schedule-management-data:/data/db
+        - mongodb-schedule-management-config:/data/configdb
+        - ./.certs/mongodb/schedule-management:/etc/ssl:ro
+        - ./.encryption_keys/schedule-management:/etc/mongodb/encryptionKeyFile:ro
+      networks:
+        - net-barbershop
+      logging:
+        driver: json-file
+        options:
+          max-size: 100m
 
     api-gateway: # Container for reverse proxy service on the RegNutes platform.
       build: ./api-gtw
@@ -93,7 +99,7 @@ services:
         - PORT_HTTPS=8081
         - SSL_CERT_PATH=/etc/.certs/server_cert.pem
         - SSL_KEY_PATH=/etc/.certs/server_key.pem
-        - JWT_PUBLIC_KEY_PATH=/etc/.certs/jwt_public.key
+        - JWT_PUBLIC_KEY_PATH=/etc/ssl/jwt.key.pub
         - API_GATEWAY_HOSTNAME=${API_GATEWAY_HOSTNAME:-localhost}
         - RABBIT_MGT_HOSTNAME=${RABBIT_MGT_HOSTNAME:-rabbit.localhost}
         - ACCOUNT_SERVICE=https://account:3001
@@ -133,15 +139,15 @@ services:
       - PORT_HTTPS=3001
       - SSL_CERT_PATH=/etc/ssl/server_cert.pem
       - SSL_KEY_PATH=/etc/ssl/server_key.pem
-      - JWT_PRIVATE_KEY_PATH=/etc/ssl/jwt_private.key
-      - JWT_PUBLIC_KEY_PATH=/etc/ssl/jwt_public.key
+      - JWT_PRIVATE_KEY_PATH=/etc/ssl/jwt.key
+      - JWT_PUBLIC_KEY_PATH=/etc/ssl/jwt.key.pub
       - ISSUER=barbershop
       - ADMIN_EMAIL=${ADMIN_EMAIL}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
       - MONGODB_ENABLE_TLS=true
       - MONGODB_URI=mongodb://admin:admin123@mongodb-account:27017/barbershop-account?authSource=admin&ssl=true
-      - MONGODB_KEY_PATH=/etc/ssl/mongodb/mongodb.pem
-      - MONGODB_CA_PATH=/etc/ssl/mongodb/ca.crt
+      - MONGODB_KEY_PATH=/etc/ssl/mongodb.pem
+      - MONGODB_CA_PATH=/etc/ssl/ca_cert.pem
       - RABBITMQ_URI=${ACCOUNT_RABBITMQ_URI}
       # - RABBITMQ_CERT_PATH=/etc/ssl/rabbitmq.crt
       # - RABBITMQ_KEY_PATH=/etc/ssl/rabbitmq.key
@@ -155,6 +161,46 @@ services:
         - 3001:3001
       volumes:
         - ./.certs/account:/etc/ssl/:ro
+      networks:
+        - net-barbershop
+
+    schedule-management:
+      build: ./schedule-management
+      container_name: barbershop-schedule-management
+      restart: always
+      depends_on: 
+        - mongodb-schedule-management
+        - rabbitmq
+        - api-gateway
+      environment:
+      - TZ=America/Sao_Paulo
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT_HTTP=3000
+      - PORT_HTTPS=3001
+      - SSL_CERT_PATH=/etc/ssl/server_cert.pem
+      - SSL_KEY_PATH=/etc/ssl/server_key.pem
+      - JWT_PRIVATE_KEY_PATH=/etc/ssl/jwt.key
+      - JWT_PUBLIC_KEY_PATH=/etc/ssl/jwt.key.pub
+      - ISSUER=barbershop
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - MONGODB_ENABLE_TLS=true
+      - MONGODB_URI=mongodb://admin:admin123@mongodb-schedule-management:27017/barbershop-schedule-management?authSource=admin&ssl=true
+      - MONGODB_KEY_PATH=/etc/ssl/mongodb.pem
+      - MONGODB_CA_PATH=/etc/ssl/ca_cert.pem
+      - RABBITMQ_URI=${ACCOUNT_RABBITMQ_URI}
+      # - RABBITMQ_CERT_PATH=/etc/ssl/rabbitmq.crt
+      # - RABBITMQ_KEY_PATH=/etc/ssl/rabbitmq.key
+      # - RABBITMQ_CA_PATH=/etc/ssl/ca.pem
+      - DASHBOARD_HOST=https://${WEB_APP_HOSTNAME}/#
+      - ENCRYPT_SECRET_KEY=${ACC_ENCRYPT_SECRET_KEY}
+      - SALT_GENERATOR_VALUE=${SALT_GENERATOR_VALUE}
+      - ISIS_TOKEN=${ISIS_TOKEN}
+      ports:
+        - 4000:4000
+        - 4001:4001
+      volumes:
+        - ./.certs/schedule-management:/etc/ssl/:ro
       networks:
         - net-barbershop
       
