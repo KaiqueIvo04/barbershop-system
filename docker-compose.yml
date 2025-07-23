@@ -19,18 +19,27 @@ services:
       container_name: barbershop-rabbitmq
       restart: always
       ports:
-        - 15672:15672 # Management UI
-        - 5672:5672 # AMQP Protocol
+        - 5672:5672
       environment:
-      - RABBITMQ_DEFAULT_USER=admin  # ← Adicione
-      - RABBITMQ_DEFAULT_PASS=admin123  # ← Adicione
-      - RABBITMQ_DEFAULT_VHOST=/
+        - TZ=America/Sao_Paulo
+      volumes:
+        - rabbitmq-data:/var/lib/rabbitmq
+        - rabbitmq-logs:/var/log/rabbitmq
+        - ./.certs/rabbitmq:/etc/ssl/:ro
+        - ./.config/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+        - ./.config/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
+      healthcheck:
+        test: ["CMD", "rabbitmqctl", "status"]
+        interval: 5s
+        timeout: 5s
+        retries: 10
       networks:
         - net-barbershop
       logging:
         driver: json-file
         options:
           max-size: 100m
+
 
     mongodb-account:
       image: percona/percona-server-mongodb:4.4.3
@@ -128,10 +137,13 @@ services:
       build: ./account
       container_name: barbershop-account
       restart: always
-      depends_on: 
-        - mongodb-account
-        - rabbitmq
-        - api-gateway
+      depends_on:
+        mongodb-account:
+          condition: service_started
+        api-gateway:
+          condition: service_started
+        rabbitmq:
+          condition: service_healthy
       environment:
       - TZ=America/Sao_Paulo
       - NODE_ENV=${NODE_ENV:-development}
@@ -149,9 +161,9 @@ services:
       - MONGODB_KEY_PATH=/etc/ssl/mongodb.pem
       - MONGODB_CA_PATH=/etc/ssl/ca_cert.pem
       - RABBITMQ_URI=${ACCOUNT_RABBITMQ_URI}
-      # - RABBITMQ_CERT_PATH=/etc/ssl/rabbitmq.crt
-      # - RABBITMQ_KEY_PATH=/etc/ssl/rabbitmq.key
-      # - RABBITMQ_CA_PATH=/etc/ssl/ca.pem
+      - RABBITMQ_CERT_PATH=/etc/ssl/rabbitmq_client_cert.pem
+      - RABBITMQ_KEY_PATH=/etc/ssl/rabbitmq_key.pem
+      - RABBITMQ_CA_PATH=/etc/ssl/ca_cert.pem
       - DASHBOARD_HOST=https://${WEB_APP_HOSTNAME}/#
       - ENCRYPT_SECRET_KEY=${ACC_ENCRYPT_SECRET_KEY}
       - SALT_GENERATOR_VALUE=${SALT_GENERATOR_VALUE}
@@ -169,9 +181,12 @@ services:
       container_name: barbershop-schedule-management
       restart: always
       depends_on: 
-        - mongodb-schedule-management
-        - rabbitmq
-        - api-gateway
+        mongodb-schedule-management:
+          condition: service_started
+        api-gateway:
+          condition: service_started
+        rabbitmq:
+          condition: service_healthy
       environment:
       - TZ=America/Sao_Paulo
       - NODE_ENV=${NODE_ENV:-development}
@@ -188,10 +203,10 @@ services:
       - MONGODB_URI=mongodb://admin:admin123@mongodb-schedule-management:27017/barbershop-schedule-management?authSource=admin&ssl=true
       - MONGODB_KEY_PATH=/etc/ssl/mongodb.pem
       - MONGODB_CA_PATH=/etc/ssl/ca_cert.pem
-      - RABBITMQ_URI=${ACCOUNT_RABBITMQ_URI}
-      # - RABBITMQ_CERT_PATH=/etc/ssl/rabbitmq.crt
-      # - RABBITMQ_KEY_PATH=/etc/ssl/rabbitmq.key
-      # - RABBITMQ_CA_PATH=/etc/ssl/ca.pem
+      - RABBITMQ_URI=${SCHEDULE_MANAGEMENT_RABBITMQ_URI}
+      - RABBITMQ_CERT_PATH=/etc/ssl/rabbitmq_client_cert.pem
+      - RABBITMQ_KEY_PATH=/etc/ssl/rabbitmq_key.pem
+      - RABBITMQ_CA_PATH=/etc/ssl/ca_cert.pem
       - DASHBOARD_HOST=https://${WEB_APP_HOSTNAME}/#
       - ENCRYPT_SECRET_KEY=${ACC_ENCRYPT_SECRET_KEY}
       - SALT_GENERATOR_VALUE=${SALT_GENERATOR_VALUE}
@@ -215,6 +230,10 @@ volumes:
     name: mongodb-schedule-management-data
   mongodb-schedule-management-config:
     name: mongodb-schedule-management-config
+  rabbitmq-data:
+    name: rabbitmq-data
+  rabbitmq-logs:
+    name: rabbitmq-logs
 
 networks:
   net-barbershop:
