@@ -1,150 +1,158 @@
 services:
-
-    redis-api-gtw: # Redis container for the Api Gateway
-      image: redis:latest
-      container_name: barbershop-redis-api-gateway
-      restart: always
-      command: ["redis-server"]
-      volumes:
-        - redis-api-gateway-data:/data
-      networks:
-        - net-barbershop
-      logging:
-        driver: json-file
-        options:
-          max-size: 100m
-
-    rabbitmq:
-      image: rabbitmq:3-management-alpine
-      container_name: barbershop-rabbitmq
-      restart: always
-      ports:
-        - 5672:5672
-      environment:
-        - TZ=America/Sao_Paulo
-      volumes:
-        - rabbitmq-data:/var/lib/rabbitmq
-        - rabbitmq-logs:/var/log/rabbitmq
-        - ./.certs/rabbitmq:/etc/ssl/:ro
-        - ./.config/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
-        - ./.config/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
-      healthcheck:
-        test: ["CMD", "rabbitmqctl", "status"]
-        interval: 5s
-        timeout: 5s
-        retries: 10
-      networks:
-        - net-barbershop
-      logging:
-        driver: json-file
-        options:
-          max-size: 100m
-
-
-    mongodb-account:
-      image: percona/percona-server-mongodb:4.4.3
-      container_name: barbershop-mongodb-account
-      restart: always
-      command: [
-        "--tlsMode", "requireTLS",
-        "--tlsCertificateKeyFile", "/etc/ssl/server.pem",
-        "--tlsCAFile", "/etc/ssl/ca_cert.pem",
-        "--enableEncryption",
-        "--encryptionKeyFile", "/etc/mongodb/encryptionKeyFile/encryption.key"
-      ]
-      environment:
-        MONGO_INITDB_ROOT_USERNAME: ${MONGO_ACCOUNT_ROOT_USER:-admin}
-        MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ACCOUNT_ROOT_PASS:-admin123}
-        MONGO_APPLICATION_DATABASE: barbershop-account
-      volumes:
-        - mongodb-account-data:/data/db
-        - mongodb-account-config:/data/configdb
-        - ./.certs/mongodb/account:/etc/ssl:ro
-        - ./.encryption_keys/account:/etc/mongodb/encryptionKeyFile:ro
-      networks:
-        - net-barbershop
-      logging:
-        driver: json-file
-        options:
-          max-size: 100m
-
-    mongodb-schedule-management:
-      image: percona/percona-server-mongodb:4.4.3
-      container_name: barbershop-mongodb-schedule-management
-      restart: always
-      command: [
-        "--tlsMode", "requireTLS",
-        "--tlsCertificateKeyFile", "/etc/ssl/server.pem",
-        "--tlsCAFile", "/etc/ssl/ca_cert.pem",
-        "--enableEncryption",
-        "--encryptionKeyFile", "/etc/mongodb/encryptionKeyFile/encryption.key"
-      ]      
-      environment:
-        MONGO_INITDB_ROOT_USERNAME: ${MONGO_SCHEDULE_MANAGEMENT_ROOT_USER:-admin}
-        MONGO_INITDB_ROOT_PASSWORD: ${MONGO_SCHEDULE_MANAGEMENT_ROOT_PASS:-admin123}
-        MONGO_INITDB_DATABASE: barbershop-schedule-management
-      volumes:
-        - mongodb-schedule-management-data:/data/db
-        - mongodb-schedule-management-config:/data/configdb
-        - ./.certs/mongodb/schedule-management:/etc/ssl:ro
-        - ./.encryption_keys/schedule-management:/etc/mongodb/encryptionKeyFile:ro
-      networks:
-        - net-barbershop
-      logging:
-        driver: json-file
-        options:
-          max-size: 100m
-
-    api-gateway: # Container for reverse proxy service on the RegNutes platform.
-      build: ./api-gtw
-      container_name: barbershop-api-gateway
-      restart: always
-      depends_on: 
-        - redis-api-gtw
-      environment:
-        - TZ=America/Sao_Paulo
-        - NODE_ENV=${NODE_ENV:-development}
-        - PORT_HTTP=8080
-        - PORT_HTTPS=8081
-        - SSL_CERT_PATH=/etc/.certs/server_cert.pem
-        - SSL_KEY_PATH=/etc/.certs/server_key.pem
-        - JWT_PUBLIC_KEY_PATH=/etc/ssl/jwt.key.pub
-        - API_GATEWAY_HOSTNAME=${API_GATEWAY_HOSTNAME:-localhost}
-        - RABBIT_MGT_HOSTNAME=${RABBIT_MGT_HOSTNAME:-rabbit.localhost}
-        - ACCOUNT_SERVICE=https://account:3001
-        - SCHEDULE_MANAGEMENT_SERVICE=https://schedule-management:4001
-        - WEB_APP_SERVICE=http://app:8080
-        - RABBIT_MGT_SERVICE=http://rabbitmq:15672
-        - ISSUER=barbershop
-        - EMULATE_REDIS=false
-        - PORT_REDIS=6379
-        - HOST_REDIS=redis-api-gtw
-      ports:
-        - 8080:8080
-        - 8081:8081
-      volumes:
-        - ${SSL_KEY_PATH}:/etc/.certs/server_key.pem:ro
-        - ${SSL_CERT_PATH}:/etc/.certs/server_cert.pem:ro
-        - .certs/api-gtw/jwt_public.key:/etc/.certs/jwt_public.key:ro
-      networks:
-        - net-barbershop
-      logging:
-        driver: json-file
-        options:
-          max-size: 100m
-        
-    account:
-      build: ./account
-      container_name: barbershop-account
-      restart: always
-      depends_on:
-        mongodb-account:
-          condition: service_started
-        api-gateway:
-          condition: service_started
-        rabbitmq:
-          condition: service_healthy
-      environment:
+  redis-api-gtw:
+    container_name: barbershop-redis-api-gateway
+    image: redis:latest
+    restart: always
+    volumes:
+      - redis-api-gateway-data:/data
+    networks:
+      - net-barbershop
+    command:
+      - redis-server
+    logging:
+      driver: json-file
+      options:
+        max-size: 100m
+  rabbitmq:
+    container_name: barbershop-rabbitmq
+    image: rabbitmq:3-management-alpine
+    restart: always
+    ports:
+      - '5672:5672'
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+      - rabbitmq-logs:/var/log/rabbitmq
+      - ./.certs/rabbitmq:/etc/ssl/:ro
+      - ./.config/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./.config/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
+    environment:
+      - TZ=America/Sao_Paulo
+    networks:
+      - net-barbershop
+    healthcheck:
+      test:
+        - CMD
+        - rabbitmqctl
+        - status
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    logging:
+      driver: json-file
+      options:
+        max-size: 100m
+  mongodb-account:
+    container_name: barbershop-mongodb-account
+    image: percona/percona-server-mongodb:4.4.3
+    restart: always
+    volumes:
+      - mongodb-account-data:/data/db
+      - mongodb-account-config:/data/configdb
+      - ./.certs/mongodb/account:/etc/ssl:ro
+      - ./.encryption_keys/account:/etc/mongodb/encryptionKeyFile:ro
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ACCOUNT_ROOT_USER:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ACCOUNT_ROOT_PASS:-admin123}
+      MONGO_APPLICATION_DATABASE: barbershop-account
+    networks:
+      - net-barbershop
+    command:
+      - '--tlsMode'
+      - requireTLS
+      - '--tlsCertificateKeyFile'
+      - /etc/ssl/server.pem
+      - '--tlsCAFile'
+      - /etc/ssl/ca_cert.pem
+      - '--enableEncryption'
+      - '--encryptionKeyFile'
+      - /etc/mongodb/encryptionKeyFile/encryption.key
+    logging:
+      driver: json-file
+      options:
+        max-size: 100m
+  mongodb-schedule-management:
+    container_name: barbershop-mongodb-schedule-management
+    image: percona/percona-server-mongodb:4.4.3
+    restart: always
+    volumes:
+      - mongodb-schedule-management-data:/data/db
+      - mongodb-schedule-management-config:/data/configdb
+      - ./.certs/mongodb/schedule-management:/etc/ssl:ro
+      - ./.encryption_keys/schedule-management:/etc/mongodb/encryptionKeyFile:ro
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_SCHEDULE_MANAGEMENT_ROOT_USER:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_SCHEDULE_MANAGEMENT_ROOT_PASS:-admin123}
+      MONGO_INITDB_DATABASE: barbershop-schedule-management
+    networks:
+      - net-barbershop
+    command:
+      - '--tlsMode'
+      - requireTLS
+      - '--tlsCertificateKeyFile'
+      - /etc/ssl/server.pem
+      - '--tlsCAFile'
+      - /etc/ssl/ca_cert.pem
+      - '--enableEncryption'
+      - '--encryptionKeyFile'
+      - /etc/mongodb/encryptionKeyFile/encryption.key
+    logging:
+      driver: json-file
+      options:
+        max-size: 100m
+  api-gateway:
+    container_name: barbershop-api-gateway
+    build: ./api-gtw
+    restart: always
+    depends_on:
+      - redis-api-gtw
+    ports:
+      - '8080:8080'
+      - '8081:8081'
+    environment:
+      - TZ=America/Sao_Paulo
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT_HTTP=8080
+      - PORT_HTTPS=8081
+      - SSL_CERT_PATH=/etc/ssl/server_cert.pem
+      - SSL_KEY_PATH=/etc/ssl/server_key.pem
+      - JWT_PUBLIC_KEY_PATH=/etc/ssl/jwt.key.pub
+      - API_GATEWAY_HOSTNAME=${API_GATEWAY_HOSTNAME:-localhost}
+      - RABBIT_MGT_HOSTNAME=${RABBIT_MGT_HOSTNAME:-rabbit.localhost}
+      - ACCOUNT_SERVICE=https://account:3001
+      - SCHEDULE_MANAGEMENT_SERVICE=https://schedule-management:4001
+      - WEB_APP_SERVICE=http://app:8080
+      - RABBIT_MGT_SERVICE=http://rabbitmq:15672
+      - ISSUER=barbershop
+      - EMULATE_REDIS=false
+      - PORT_REDIS=6379
+      - HOST_REDIS=redis-api-gtw
+    volumes:
+      - ${SSL_KEY_PATH}:/etc/ssl/server_key.pem:ro
+      - ${SSL_CERT_PATH}:/etc/ssl/server_cert.pem:ro
+      - ./.certs/api-gtw/jwt.key.pub:/etc/ssl/jwt.key.pub:ro
+    networks:
+      - net-barbershop
+    logging:
+      driver: json-file
+      options:
+        max-size: 100m
+  account:
+    container_name: barbershop-account
+    build: ./account
+    restart: always
+    depends_on:
+      mongodb-account:
+        condition: service_started
+      api-gateway:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+    ports:
+      - '3000:3000'
+      - '3001:3001'
+    volumes:
+      - ./.certs/account:/etc/ssl/:ro
+    environment:
       - TZ=America/Sao_Paulo
       - NODE_ENV=${NODE_ENV:-development}
       - PORT_HTTP=3000
@@ -168,30 +176,29 @@ services:
       - ENCRYPT_SECRET_KEY=${ACC_ENCRYPT_SECRET_KEY}
       - SALT_GENERATOR_VALUE=${SALT_GENERATOR_VALUE}
       - ISIS_TOKEN=${ISIS_TOKEN}
-      ports:
-        - 3000:3000
-        - 3001:3001
-      volumes:
-        - ./.certs/account:/etc/ssl/:ro
-      networks:
-        - net-barbershop
-
-    schedule-management:
-      build: ./schedule-management
-      container_name: barbershop-schedule-management
-      restart: always
-      depends_on: 
-        mongodb-schedule-management:
-          condition: service_started
-        api-gateway:
-          condition: service_started
-        rabbitmq:
-          condition: service_healthy
-      environment:
+    networks:
+      - net-barbershop
+  schedule-management:
+    container_name: barbershop-schedule-management
+    build: ./schedule-management
+    restart: always
+    depends_on:
+      mongodb-schedule-management:
+        condition: service_started
+      api-gateway:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+    ports:
+      - '4000:4000'
+      - '4001:4001'
+    volumes:
+      - ./.certs/schedule-management:/etc/ssl/:ro
+    environment:
       - TZ=America/Sao_Paulo
       - NODE_ENV=${NODE_ENV:-development}
-      - PORT_HTTP=3000
-      - PORT_HTTPS=3001
+      - PORT_HTTP=4000
+      - PORT_HTTPS=4001
       - SSL_CERT_PATH=/etc/ssl/server_cert.pem
       - SSL_KEY_PATH=/etc/ssl/server_key.pem
       - JWT_PRIVATE_KEY_PATH=/etc/ssl/jwt.key
@@ -211,14 +218,9 @@ services:
       - ENCRYPT_SECRET_KEY=${ACC_ENCRYPT_SECRET_KEY}
       - SALT_GENERATOR_VALUE=${SALT_GENERATOR_VALUE}
       - ISIS_TOKEN=${ISIS_TOKEN}
-      ports:
-        - 4000:4000
-        - 4001:4001
-      volumes:
-        - ./.certs/schedule-management:/etc/ssl/:ro
-      networks:
-        - net-barbershop
-      
+    networks:
+      - net-barbershop
+
 volumes:
   redis-api-gateway-data:
     name: redis-api-gateway-data
@@ -240,4 +242,4 @@ networks:
     name: net-barbershop
     driver: bridge
     driver_opts:
-      encrypted: "true"
+      encrypted: 'true'
