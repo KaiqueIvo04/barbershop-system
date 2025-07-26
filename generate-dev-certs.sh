@@ -213,4 +213,4 @@ chmod 755 ${CERTS_DIR} -R #Alterar permissão para os arquivos
 
 log_success "--ARQUIVOS TEMPORÁRIOS REMOVIDOS--"
 
-log_success "🎉 TODOS OS CERTIFICADOS FORAM GERADOS COM SUCESSO!"
+log_success "TODOS OS CERTIFICADOS FORAM GERADOS COM SUCESSO!!!"

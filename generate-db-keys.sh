@@ -32,4 +32,4 @@ for service in "${SERVICES_NAMES[@]}"; do
     log_success "Chave de criptografia gerada: $KEY_FILE"
 done
 
-log_success "🎉 Todas as chaves de criptografia em repouso foram geradas com sucesso!"
+log_success "Todas as chaves de criptografia em repouso foram geradas com sucesso!!!"
