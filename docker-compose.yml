@@ -111,24 +111,23 @@ services:
     environment:
       - TZ=America/Sao_Paulo
       - NODE_ENV=${NODE_ENV:-development}
-      - PORT_HTTP=8080
-      - PORT_HTTPS=8081
+      - PORT_HTTP=${PORT_HTTP:-8080}
+      - PORT_HTTPS=${PORT_HTTPS:-8081}
       - SSL_CERT_PATH=/etc/ssl/server_cert.pem
       - SSL_KEY_PATH=/etc/ssl/server_key.pem
       - JWT_PUBLIC_KEY_PATH=/etc/ssl/jwt.key.pub
-      - API_GATEWAY_HOSTNAME=${API_GATEWAY_HOSTNAME:-localhost}
+      - API_GATEWAY_HOSTNAME=${API_GATEWAY_HOSTNAME:-api.localhost}
       - RABBIT_MGT_HOSTNAME=${RABBIT_MGT_HOSTNAME:-rabbit.localhost}
       - ACCOUNT_SERVICE=https://account:3001
       - SCHEDULE_MANAGEMENT_SERVICE=https://schedule-management:4001
-      - WEB_APP_SERVICE=http://app:8080
       - RABBIT_MGT_SERVICE=http://rabbitmq:15672
       - ISSUER=barbershop
       - EMULATE_REDIS=false
       - PORT_REDIS=6379
       - HOST_REDIS=redis-api-gtw
     volumes:
-      - ${SSL_KEY_PATH}:/etc/ssl/server_key.pem:ro
-      - ${SSL_CERT_PATH}:/etc/ssl/server_cert.pem:ro
+      - ./.certs/api-gtw/server_key.pem:/etc/ssl/server_key.pem:ro
+      - ./.certs/api-gtw/server_cert.pem:/etc/ssl/server_cert.pem:ro
       - ./.certs/api-gtw/jwt.key.pub:/etc/ssl/jwt.key.pub:ro
     networks:
       - net-barbershop
@@ -155,8 +154,8 @@ services:
     environment:
       - TZ=America/Sao_Paulo
       - NODE_ENV=${NODE_ENV:-development}
-      - PORT_HTTP=3000
-      - PORT_HTTPS=3001
+      - PORT_HTTP=${PORT_HTTP_ACC:-3000}
+      - PORT_HTTPS=${PORT_HTTPS_ACC:-3001}
       - SSL_CERT_PATH=/etc/ssl/server_cert.pem
       - SSL_KEY_PATH=/etc/ssl/server_key.pem
       - JWT_PRIVATE_KEY_PATH=/etc/ssl/jwt.key
@@ -165,17 +164,15 @@ services:
       - ADMIN_EMAIL=${ADMIN_EMAIL}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
       - MONGODB_ENABLE_TLS=true
-      - MONGODB_URI=mongodb://admin:admin123@mongodb-account:27017/barbershop-account?authSource=admin&ssl=true
+      - MONGODB_URI=${ACCOUNT_MONGODB_URI}
       - MONGODB_KEY_PATH=/etc/ssl/mongodb.pem
       - MONGODB_CA_PATH=/etc/ssl/ca_cert.pem
       - RABBITMQ_URI=${ACCOUNT_RABBITMQ_URI}
       - RABBITMQ_CERT_PATH=/etc/ssl/rabbitmq_client_cert.pem
       - RABBITMQ_KEY_PATH=/etc/ssl/rabbitmq_key.pem
       - RABBITMQ_CA_PATH=/etc/ssl/ca_cert.pem
-      - DASHBOARD_HOST=https://${WEB_APP_HOSTNAME}/#
       - ENCRYPT_SECRET_KEY=${ACC_ENCRYPT_SECRET_KEY}
       - SALT_GENERATOR_VALUE=${SALT_GENERATOR_VALUE}
-      - ISIS_TOKEN=${ISIS_TOKEN}
     networks:
       - net-barbershop
   schedule-management:
@@ -197,8 +194,8 @@ services:
     environment:
       - TZ=America/Sao_Paulo
       - NODE_ENV=${NODE_ENV:-development}
-      - PORT_HTTP=4000
-      - PORT_HTTPS=4001
+      - PORT_HTTP=${PORT_HTTP_SCH:-4000}
+      - PORT_HTTPS=${PORT_HTTPS_SCH:-4001}
       - SSL_CERT_PATH=/etc/ssl/server_cert.pem
       - SSL_KEY_PATH=/etc/ssl/server_key.pem
       - JWT_PRIVATE_KEY_PATH=/etc/ssl/jwt.key
@@ -207,17 +204,15 @@ services:
       - ADMIN_EMAIL=${ADMIN_EMAIL}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
       - MONGODB_ENABLE_TLS=true
-      - MONGODB_URI=mongodb://admin:admin123@mongodb-schedule-management:27017/barbershop-schedule-management?authSource=admin&ssl=true
+      - MONGODB_URI=${SCHEDULE_MONGODB_URI}
       - MONGODB_KEY_PATH=/etc/ssl/mongodb.pem
       - MONGODB_CA_PATH=/etc/ssl/ca_cert.pem
       - RABBITMQ_URI=${SCHEDULE_MANAGEMENT_RABBITMQ_URI}
       - RABBITMQ_CERT_PATH=/etc/ssl/rabbitmq_client_cert.pem
       - RABBITMQ_KEY_PATH=/etc/ssl/rabbitmq_key.pem
       - RABBITMQ_CA_PATH=/etc/ssl/ca_cert.pem
-      - DASHBOARD_HOST=https://${WEB_APP_HOSTNAME}/#
       - ENCRYPT_SECRET_KEY=${ACC_ENCRYPT_SECRET_KEY}
       - SALT_GENERATOR_VALUE=${SALT_GENERATOR_VALUE}
-      - ISIS_TOKEN=${ISIS_TOKEN}
     networks:
       - net-barbershop
 
